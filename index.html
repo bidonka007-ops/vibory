@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Выборы лидера компании</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#14213d;--mu:#5b6478;--ac:#2f5bea;--ac2:#e8eefe;--bd:#e1e6f0;--ok:#1a8a4a;--er:#c62828;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1424;--card:#172038;--tx:#eef1fa;--mu:#9aa4bd;--ac:#6f93ff;--ac2:#1f2b4d;--bd:#26314f;--ok:#4cc784;--er:#ff7a7a}}
+:root[data-theme="dark"]{--bg:#0e1424;--card:#172038;--tx:#eef1fa;--mu:#9aa4bd;--ac:#6f93ff;--ac2:#1f2b4d;--bd:#26314f;--ok:#4cc784;--er:#ff7a7a}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{text-align:center;padding:48px 20px 24px}
+header h1{margin:0 0 8px;font-size:clamp(26px,5vw,38px)}
+header p{margin:0 auto;max-width:560px;color:var(--mu)}
+main{max-width:860px;margin:0 auto;padding:0 20px 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.card{background:var(--card);border:2px solid var(--bd);border-radius:18px;padding:28px;text-align:center;cursor:pointer;transition:.15s}
+.card:hover{border-color:var(--ac)}.card.sel{border-color:var(--ac);background:var(--ac2)}
+.ava{width:88px;height:88px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:700;margin:0 auto 16px}
+.card h2{margin:0 0 8px;font-size:22px}.card p{margin:0;color:var(--mu);font-size:15px}
+.act{text-align:center;margin-top:28px}
+button{font:inherit;border:0;border-radius:12px;padding:13px 28px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}button.ghost{background:transparent;color:var(--ac);border:1px solid var(--bd)}
+.msg{margin-top:16px;min-height:24px;text-align:center}.ok{color:var(--ok)}.er{color:var(--er)}
+.note{color:var(--mu);font-size:14px;margin-top:6px}
+footer{text-align:center;padding:20px;color:var(--mu);font-size:14px}
+footer a{color:var(--mu);cursor:pointer;text-decoration:underline}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
+.modal.on{display:flex}.box{background:var(--card);border-radius:18px;padding:28px;width:100%;max-width:420px;max-height:90%;overflow:auto}
+.box h3{margin:0 0 14px}input{width:100%;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);margin-bottom:12px}
+.row{margin:14px 0}.row .top{display:flex;justify-content:space-between;font-weight:600;margin-bottom:6px}
+.bar{height:12px;background:var(--ac2);border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Выборы лидера компании</h1>
+  <p>Выберите кандидата, которого вы хотите видеть во главе компании. Голосование анонимное: в базе хранится только выбранный кандидат, без имени и данных голосующего.</p>
+</header>
+<main>
+  <div class="grid" id="cands"></div>
+  <div class="act"><button id="go" disabled>Проголосовать</button><div class="note">Голосовать можно только один раз</div></div>
+  <div class="msg" id="msg"></div>
+</main>
+<footer><a id="adm">Панель организатора</a></footer>
+<div class="modal" id="modal"><div class="box" id="box"></div></div>
+
+<script>
+// ====== НАСТРОЙКИ: вставьте данные из Supabase (Project Settings -> API) ======
+const SUPABASE_URL="https://mtpzwfxprsezcaebqjcw.supabase.co";
+const SUPABASE_KEY="sb_publishable_LwmU-TB7GFj7ZfyYtTR5tQ_HwBgSVJq";
+// ====== ИМЕНА И ОПИСАНИЯ КАНДИДАТОВ (id должны остаться "a" и "b") ======
+const CANDS=[
+ {id:"a",name:"Cocarcea Gabriel",desc:"Здесь будет описание первого кандидата: опыт, достижения, планы для компании."},
+ {id:"b",name:"Rîmbu Valentin",desc:"Здесь будет описание второго кандидата: опыт, достижения, планы для компании."}
+];
+// =====================================================================
+const $=s=>document.querySelector(s);
+const H={apikey:SUPABASE_KEY,"Content-Type":"application/json"};
+if(SUPABASE_KEY.startsWith("eyJ"))H.Authorization="Bearer "+SUPABASE_KEY; // старый anon-ключ (JWT)
+const KEY="company_vote_done";
+let sel=null,voted=false;
+try{voted=localStorage.getItem(KEY)==="1"}catch(e){}
+const msg=(t,c)=>{$("#msg").className="msg "+(c||"");$("#msg").textContent=t};
+
+$("#cands").innerHTML=CANDS.map(()=>'<div class="card"><div class="ava"></div><h2></h2><p></p></div>').join("");
+document.querySelectorAll(".card").forEach((el,i)=>{
+  el.querySelector("h2").textContent=CANDS[i].name;
+  el.querySelector("p").textContent=CANDS[i].desc;
+  el.querySelector(".ava").textContent=CANDS[i].name.trim().charAt(0).toUpperCase();
+  el.onclick=()=>{if(voted)return;sel=CANDS[i].id;document.querySelectorAll(".card").forEach(x=>x.classList.toggle("sel",x===el));$("#go").disabled=false};
+});
+if(voted)done();
+function done(){$("#go").disabled=true;msg("Спасибо! Ваш голос учтён.","ok")}
+
+$("#go").onclick=async()=>{
+  if(!sel||voted)return;
+  $("#go").disabled=true;msg("Отправка…");
+  try{
+    const r=await fetch(SUPABASE_URL+"/rest/v1/votes",{method:"POST",headers:{...H,Prefer:"return=minimal"},body:JSON.stringify({candidate:sel})});
+    if(!r.ok)throw 0;
+    voted=true;try{localStorage.setItem(KEY,"1")}catch(e){}
+    done();
+  }catch(e){msg("Не удалось отправить голос. Попробуйте ещё раз.","er");$("#go").disabled=false}
+};
+
+// ---------- Панель организатора ----------
+const modal=$("#modal"),box=$("#box");
+const close=()=>modal.classList.remove("on");
+modal.onclick=e=>{if(e.target===modal)close()};
+function show(h){box.innerHTML=h;modal.classList.add("on")}
+$("#adm").onclick=()=>{
+  show('<h3>Вход для организатора</h3><input type="password" id="pw" placeholder="Пароль" autocomplete="off"><div class="msg er" id="am"></div><div class="btns"><button id="ok">Войти</button><button class="ghost" id="x">Закрыть</button></div>');
+  $("#x").onclick=close;
+  $("#ok").onclick=()=>results($("#pw").value);
+  $("#pw").onkeydown=e=>{if(e.key==="Enter")results($("#pw").value)};
+};
+async function results(pw){
+  if(!pw){$("#am").textContent="Введите пароль";return}
+  $("#am").textContent="";
+  try{
+    const r=await fetch(SUPABASE_URL+"/rest/v1/rpc/admin_results",{method:"POST",headers:H,body:JSON.stringify({pw})});
+    if(!r.ok){$("#am").textContent="Неверный пароль";return}
+    const n=await r.json();
+    const tot=CANDS.reduce((a,c)=>a+(n[c.id]||0),0);
+    box.innerHTML='<h3>Результаты голосования</h3>'+CANDS.map(c=>{const v=n[c.id]||0,p=tot?Math.round(v*100/tot):0;return `<div class="row"><div class="top"><span class="nm"></span><span>${v} (${p}%)</span></div><div class="bar"><i style="width:${p}%"></i></div></div>`}).join("")+`<p class="note">Всего проголосовало: ${tot}</p><div class="btns"><button id="rf">Обновить</button><button class="ghost" id="x">Закрыть</button></div>`;
+    box.querySelectorAll(".nm").forEach((e,i)=>e.textContent=CANDS[i].name);
+    $("#rf").onclick=()=>results(pw);$("#x").onclick=close;
+  }catch(e){$("#am").textContent="Ошибка соединения"}
+}
+</script>
+</body>
+</html>
